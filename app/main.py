@@ -1,0 +1,168 @@
+import os, sys
+from pathlib import Path
+from queue import Queue
+from concurrent.futures import ThreadPoolExecutor
+
+from app.config import load_config, save_config, DEFAULTS
+from app.hud import TkHud
+from app.tailer import start_tail_thread
+from app.util import ts
+from app.i18n import load_i18n
+
+# --- Laufzeitpfade: EXE vs. Script ---
+if getattr(sys, 'frozen', False):  # PyInstaller-EXE
+    BASE_DIR = os.path.dirname(sys.executable)
+else:                               # Script
+    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+
+# Projekt-Imports (Pfad sicherstellen)
+if getattr(sys, 'frozen', False):
+    sys.path.insert(0, BASE_DIR)
+else:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+CONFIG_FILENAME = os.path.join(BASE_DIR, "config.json")
+
+def pick_base_folder(t, initial_dir: str | None = None) -> str:
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        folder = filedialog.askdirectory(
+            title=t("dialog.pick_base_folder"),
+            initialdir=initial_dir or os.getcwd(),
+        )
+        return folder or ""
+    finally:
+        root.destroy()
+
+def ensure_config_exists(path: str, t) -> None:
+    if not os.path.isfile(path):
+        cfg = {"log_path": "", **DEFAULTS}
+        try:
+            save_config(path, cfg)
+            print(t("cfg.first_time", path=path))
+        except Exception as e:
+            print(t("cfg.create_fail", err=e))
+
+def request_api_key(t) -> str:
+    import tkinter as tk
+    from tkinter import simpledialog, messagebox
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        key = simpledialog.askstring(
+            t("api.dialog.title"),
+            t("api.dialog.prompt"),
+            show="*"
+        )
+        if not key:
+            messagebox.showwarning(
+                t("api.dialog.warning.empty_title"),
+                t("api.dialog.warning.empty_msg")
+            )
+            return ""
+        key = key.strip()
+        if not key.startswith("sk-"):
+            messagebox.showwarning(
+                t("api.dialog.warning.invalid_title"),
+                t("api.dialog.warning.invalid_msg")
+            )
+            return ""
+        return key
+    finally:
+        root.destroy()
+
+def main():
+    # 1) config.json sicherstellen/erzeugen
+    ensure_config_exists(CONFIG_FILENAME, lambda k, **kw: k)
+
+    # 2) Konfiguration laden (nur EINMAL!)
+    cfg = load_config(CONFIG_FILENAME)
+
+    # 2b) Sprache laden
+    lang_code = (cfg.get("lang") or "en").strip().lower()
+    i18n = load_i18n(BASE_DIR, lang_code)
+    t = i18n.t  # Kurzalias
+
+    # 3) API-Key ggf. erfragen & speichern
+    ensure_config_exists(CONFIG_FILENAME, t)
+    api_key = (cfg.get("open_ai_api_key") or "").strip()
+    if not api_key:
+        print(t("api.missing"))
+        key = request_api_key(t)
+        if not key:
+            print(t("abort.no_api"))
+            return
+        cfg["open_ai_api_key"] = key
+        try:
+            save_config(CONFIG_FILENAME, cfg)
+            print(t("api.saved", path=CONFIG_FILENAME))
+        except Exception as e:
+            print(t("api.save_fail", err=e))
+
+    # 4) log_path prüfen (leer/ungültig → Steam-Basisordner wählen & Pfad bauen)
+    raw_log_path = (cfg.get("log_path") or "").strip()
+    if not raw_log_path or not os.path.isfile(raw_log_path):
+        hint = "leer" if not raw_log_path else f"nicht gefunden: {raw_log_path}"
+        print(t("log.hint_choose", hint=hint))
+
+        base = pick_base_folder(t, os.path.dirname(raw_log_path) if raw_log_path else BASE_DIR)
+        if not base:
+            print(t("abort.no_folder"))
+            return
+
+        log_path = Path(base) / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "console.log"
+        log_path_str = os.path.normpath(str(log_path))
+
+        cfg["log_path"] = log_path_str
+        try:
+            save_config(CONFIG_FILENAME, cfg)
+            print(t("cfg.log_saved", path=CONFIG_FILENAME, log=log_path_str))
+        except Exception as e:
+            print(t("cfg.save_fail", err=e))
+    else:
+        log_path = raw_log_path
+
+    ignore_names = cfg.get("ignore_names", [])
+    poll_ms = int(cfg.get("poll_interval_ms", 100))
+
+    print(t("hud.title"))
+    print(t("app.header"))
+    print(t("hud.logfile", log=log_path))
+    print(t("hud.ignore", names=', '.join(ignore_names) or '(keine)'))
+    print(t("hud.gpt_api", api=cfg.get("gpt_api")))
+    print(t("hud.gpt_model", model=cfg.get("gpt_model")))
+    print(t("hud.api_key", state='(gesetzt)' if cfg.get("open_ai_api_key") else '(leer)'))
+    print(t("hud.temp", temp=cfg.get("temperature")))
+    print(t("hud.no_translate", langs=', '.join(cfg.get('no_translate_langs', [])) or '(leer)'))
+    print(t("hud.poll", ms=poll_ms))
+    print()
+
+    # HUD + Tail starten
+    from app.hud import TkHud
+    from app.tailer import start_tail_thread
+
+    q = Queue()
+    hud = TkHud(q, alpha=0.72, font="Consolas 11")
+
+    import builtins
+    original_print = builtins.print
+    builtins.print = lambda *a, **kw: (original_print(*a, **kw), q.put(("line", " ".join(map(str, a)))))
+
+    def emit_structured(dt, scope, name, msg):
+        q.put(("structured", {"dt": dt, "scope": scope, "name": name, "msg": msg}))
+
+    pool = ThreadPoolExecutor(max_workers=3)
+    t = start_tail_thread(log_path, ignore_names, poll_ms, cfg, emit_structured, pool)
+
+    try:
+        hud.run()
+    finally:
+        builtins.print = original_print
+        try: pool.shutdown(wait=False)
+        except Exception: pass
+
+if __name__ == "__main__":
+    main()
