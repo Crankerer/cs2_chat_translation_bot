@@ -1,0 +1,1 @@
+# cs2_chat_translation_bot
