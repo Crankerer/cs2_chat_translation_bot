@@ -4,35 +4,35 @@ import json, os
 from typing import Any, Dict
 
 _DEFAULTS: Dict[str, str] = {
-    # Fallback-Texte (können leer bleiben; dienen als Notnagel)
+    # Fallback texts (can remain empty; used as a last resort)
     "app.title": "CS2 Chat Log LLM Monitor",
     "app.header": "========================",
-    "cfg.first_time": "[Info] Erste Konfiguration erzeugt: {path}",
-    "cfg.create_fail": "[Warnung] Konnte config.json nicht anlegen: {err}",
-    "api.missing": "[Hinweis] Kein OpenAI API-Key in config.json gefunden.",
-    "api.saved": "[OK] OpenAI API-Key gespeichert in {path}",
-    "api.save_fail": "[Warnung] Konnte API-Key nicht speichern: {err}",
-    "api.dialog.title": "OpenAI API Key erforderlich",
-    "api.dialog.prompt": "Bitte gib deinen OpenAI API-Key ein (beginnt meist mit 'sk-'):",
-    "api.dialog.warning.empty_title": "Fehlender API-Key",
-    "api.dialog.warning.empty_msg": "Kein API-Key eingegeben. Das Programm wird beendet.",
-    "api.dialog.warning.invalid_title": "Ungültiger Schlüssel",
-    "api.dialog.warning.invalid_msg": "Der Schlüssel scheint kein gültiger OpenAI-Key zu sein.",
-    "abort.no_api": "[Abbruch] Kein gültiger API-Key eingegeben.",
-    "log.hint_choose": "[Hinweis] log_path {hint}. Bitte wähle den Steam-Ordner - steamapps (Basis vor 'common') …",
-    "dialog.pick_base_folder": "Wähle deinen Steam-Ordner (Basis vor 'common')",
-    "abort.no_folder": "[Abbruch] Kein Ordner gewählt.",
-    "cfg.log_saved": "[OK] log_path gespeichert in {path}: {log}",
-    "cfg.save_fail": "[Warnung] Konnte config nicht speichern: {err}",
+    "cfg.first_time": "[Info] First configuration created: {path}",
+    "cfg.create_fail": "[Warning] Could not create config.json: {err}",
+    "api.missing": "[Notice] No OpenAI API key found in config.json.",
+    "api.saved": "[OK] OpenAI API key saved to {path}",
+    "api.save_fail": "[Warning] Could not save API key: {err}",
+    "api.dialog.title": "OpenAI API Key Required",
+    "api.dialog.prompt": "Please enter your OpenAI API key (usually starts with 'sk-'):",
+    "api.dialog.warning.empty_title": "Missing API Key",
+    "api.dialog.warning.empty_msg": "No API key entered. The program will exit.",
+    "api.dialog.warning.invalid_title": "Invalid Key",
+    "api.dialog.warning.invalid_msg": "The key does not appear to be a valid OpenAI key.",
+    "abort.no_api": "[Abort] No valid API key entered.",
+    "log.hint_choose": "[Notice] log_path {hint}. Please select your Steam folder – the base before 'common' …",
+    "dialog.pick_base_folder": "Select your Steam folder (base before 'common')",
+    "abort.no_folder": "[Abort] No folder selected.",
+    "cfg.log_saved": "[OK] log_path saved to {path}: {log}",
+    "cfg.save_fail": "[Warning] Could not save config: {err}",
     "hud.title": "CS2 Chat Log LLM Monitor",
-    "hud.logfile": "Log-Datei           : {log}",
-    "hud.ignore": "Ignoriere Namen     : {names}",
-    "hud.gpt_api": "GPT API             : {api}",
-    "hud.gpt_model": "GPT Model           : {model}",
-    "hud.api_key": "API-Key             : {state}",
-    "hud.temp": "Temperature         : {temp}",
-    "hud.no_translate": "no_translate_langs  : {langs}",
-    "hud.poll": "Poll-Intervall      : {ms} ms",
+    "hud.logfile": "Log file           : {log}",
+    "hud.ignore": "Ignore names       : {names}",
+    "hud.gpt_api": "GPT API            : {api}",
+    "hud.gpt_model": "GPT Model          : {model}",
+    "hud.api_key": "API key            : {state}",
+    "hud.temp": "Temperature        : {temp}",
+    "hud.no_translate": "no_translate_langs : {langs}",
+    "hud.poll": "Poll interval      : {ms} ms",
 }
 
 class I18N:
@@ -40,7 +40,7 @@ class I18N:
         self.texts = {**_DEFAULTS, **(texts or {})}
 
     def t(self, key: str, **kwargs: Any) -> str:
-        s = self.texts.get(key, key)  # wenn key fehlt, zeige Key selbst
+        s = self.texts.get(key, key)  # if key is missing, display the key itself
         try:
             return s.format(**kwargs)
         except Exception:
@@ -51,7 +51,7 @@ def _load_json(path: str) -> Dict[str, str]:
         return json.load(f)
 
 def load_i18n(base_dir: str, lang_code: str) -> I18N:
-    # sucht lang/lang_<code>.json mit Fallback auf EN, dann Defaults
+    # Looks for lang/lang_<code>.json with fallback to EN, then defaults
     candidates = [
         os.path.join(base_dir, "lang", f"lang_{lang_code}.json"),
         os.path.join(base_dir, "lang", "lang_en.json"),

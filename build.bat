@@ -2,7 +2,7 @@
 setlocal
 title Build CS2ChatHUD
 
-:: === Einstellungen ===
+:: === Settings ===
 set APP_NAME=CS2ChatHUD
 set ENTRY_POINT=app\main.py
 set EXTRA_PATH=app
@@ -11,15 +11,15 @@ set LANG_SRC_DIR=app\lang
 set DIST_DIR=dist\%APP_NAME%
 
 echo.
-echo 🏗️  Baue %APP_NAME% mit PyInstaller...
+echo 🏗️  Building %APP_NAME% with PyInstaller...
 echo.
 
-:: Alte Builds löschen
+:: Delete old builds
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
 del "%APP_NAME%.spec" 2>nul
 
-:: === PyInstaller-Aufruf ===
+:: === PyInstaller command ===
 pyinstaller %ENTRY_POINT% ^
  --name %APP_NAME% ^
  --onedir ^
@@ -28,20 +28,20 @@ pyinstaller %ENTRY_POINT% ^
  --add-data "%CONFIG_FILE%;."
 
 if %errorlevel% neq 0 (
-    echo ❌ Fehler beim Build!
+    echo ❌ Build failed!
     pause
     exit /b %errorlevel%
 )
 
-:: === Sprachdateien kopieren ===
+:: === Copy language files ===
 echo.
-echo 📦 Kopiere Sprachdateien nach %DIST_DIR%\lang ...
+echo 📦 Copying language files to %DIST_DIR%\lang ...
 if not exist "%DIST_DIR%\lang" mkdir "%DIST_DIR%\lang"
 copy "%LANG_SRC_DIR%\lang_*.json" "%DIST_DIR%\lang" >nul
 
 echo.
-echo ✅ Build abgeschlossen!
-echo 📁 Ausgabe: %DIST_DIR%
+echo ✅ Build completed successfully!
+echo 📁 Output: %DIST_DIR%
 echo.
 dir /b "%DIST_DIR%"
 echo.

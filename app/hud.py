@@ -43,7 +43,7 @@ class TkHud:
         frame = tk.Frame(self.root, bg="black")
         frame.pack(fill="both", expand=True)
 
-        # Topbar mit Close-Button ✕
+        # Topbar with Close-Button ✕
         topbar = tk.Frame(frame, bg="black")
         topbar.pack(fill="x", side="top")
 

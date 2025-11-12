@@ -1,4 +1,3 @@
-
 import os, json
 
 DEFAULTS = {
@@ -15,7 +14,9 @@ DEFAULTS = {
     "lang": "en"
 }
 
+
 def _merge_defaults(cfg: dict) -> tuple[dict, bool]:
+    """Merge DEFAULTS into the existing config (used for backward compatibility)."""
     changed = False
     for k, v in DEFAULTS.items():
         if k not in cfg:
@@ -23,8 +24,9 @@ def _merge_defaults(cfg: dict) -> tuple[dict, bool]:
             changed = True
     return cfg, changed
 
+
 def load_config(path: str) -> dict:
-    # 1) Datei lesen (resilient)
+    # 1) Read the file safely
     try:
         with open(path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
@@ -35,10 +37,10 @@ def load_config(path: str) -> dict:
     except Exception:
         cfg = {}
 
-    # 2) Defaults einmischen (Migration alter Dateien)
+    # 2) Merge in defaults (for migrating older files)
     cfg, changed = _merge_defaults(cfg)
 
-    # 3) API-Key ggf. aus Datei laden
+    # 3) Load API key from an external file if defined
     key_file = (cfg.get("open_ai_api_key_file") or "").strip()
     if not (cfg.get("open_ai_api_key") or "").strip() and key_file:
         try:
@@ -48,7 +50,7 @@ def load_config(path: str) -> dict:
         except Exception:
             pass
 
-    # 4) log_path normalisieren (vermindert gemischte Slashes)
+    # 4) Normalize the log_path (prevents mixed slash formats)
     lp = cfg.get("log_path", "")
     if isinstance(lp, str) and lp:
         norm_lp = os.path.normpath(lp)
@@ -56,7 +58,7 @@ def load_config(path: str) -> dict:
             cfg["log_path"] = norm_lp
             changed = True
 
-    # 5) Migration zurückschreiben, wenn sich was geändert hat
+    # 5) Write back the migrated config if anything changed
     if changed:
         try:
             save_config(path, cfg)
@@ -65,6 +67,8 @@ def load_config(path: str) -> dict:
 
     return cfg
 
+
 def save_config(path: str, cfg: dict) -> None:
+    """Save configuration as a formatted JSON file."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)

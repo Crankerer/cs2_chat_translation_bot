@@ -1,4 +1,3 @@
-
 import os, time, collections, threading
 from concurrent.futures import ThreadPoolExecutor
 from .util import ts, normalize
@@ -6,20 +5,33 @@ from .parser import iter_chat_entries
 from .file_follow import open_follow
 from .llm import build_system_prompt, call_chatgpt
 
+
 def should_ignore(name: str, ignore_names: list[str]) -> bool:
     n = normalize(name).casefold()
     return any(n == normalize(x).casefold() for x in ignore_names)
 
-def start_tail_thread(log_path: str, ignore_names: list[str], poll_ms: int, cfg: dict,
-                      emit_structured, pool: ThreadPoolExecutor) -> threading.Thread:
+
+def start_tail_thread(
+    log_path: str,
+    ignore_names: list[str],
+    poll_ms: int,
+    cfg: dict,
+    emit_structured,
+    pool: ThreadPoolExecutor,
+    t
+) -> threading.Thread:
+    """Start a background thread that tails the log file, sends messages to the LLM when needed,
+    and emits structured translations via `emit_structured`."""
+
     def _worker():
-        f, st_prev = open_follow(log_path)
+        f, st_prev = open_follow(log_path, t)
         last_inode = getattr(st_prev, "st_ino", None)
         buffer = ""
         system_prompt = build_system_prompt(cfg.get("no_translate_langs", []))
         last_calls = collections.deque(maxlen=10)
 
-        print(ts(), "Überwachung gestartet — Übersetze nur bei Bedarf.\n")
+        print(ts(), t("tail.start"))
+        print()
 
         while True:
             try:
@@ -29,9 +41,10 @@ def start_tail_thread(log_path: str, ignore_names: list[str], poll_ms: int, cfg:
                     last_end = 0
                     for dt, scope, name, msg, endpos in iter_chat_entries(buffer):
                         if should_ignore(name, ignore_names):
-                            last_end = endpos; continue
+                            last_end = endpos
+                            continue
 
-                        # sanftes Rate-Limiting
+                        # gentle rate limiting
                         now = time.time()
                         if len(last_calls) == last_calls.maxlen and now - last_calls[0] < 1.0:
                             time.sleep(0.1)
@@ -42,7 +55,7 @@ def start_tail_thread(log_path: str, ignore_names: list[str], poll_ms: int, cfg:
                             cfg["gpt_api"], cfg["gpt_model"],
                             cfg.get("open_ai_api_key", ""),
                             float(cfg.get("temperature", 0.2)),
-                            name, msg, system_prompt
+                            name, msg, system_prompt, t
                         )
 
                         def deliver(fut, dt=dt, scope=scope, name=name):
@@ -52,6 +65,7 @@ def start_tail_thread(log_path: str, ignore_names: list[str], poll_ms: int, cfg:
                                     emit_structured(dt, scope, name, translated)
                                 except Exception:
                                     pass
+
                         fut.add_done_callback(deliver)
                         last_end = endpos
 
@@ -64,10 +78,12 @@ def start_tail_thread(log_path: str, ignore_names: list[str], poll_ms: int, cfg:
                     try:
                         st_now = os.stat(log_path)
                     except FileNotFoundError:
-                        try: f.close()
-                        except Exception: pass
-                        print(ts(), "[Info] Log-Datei nicht verfügbar. Warte…")
-                        f, st_prev = open_follow(log_path)
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+                        print(ts(), t("tail.log_missing"))
+                        f, st_prev = open_follow(log_path, t)
                         last_inode = getattr(st_prev, "st_ino", None)
                         buffer = ""
                         time.sleep(poll_ms / 1000)
@@ -80,24 +96,28 @@ def start_tail_thread(log_path: str, ignore_names: list[str], poll_ms: int, cfg:
                     truncated = current_size < pos
 
                     if rotated or truncated:
-                        try: f.close()
-                        except Exception: pass
-                        print(ts(), f"[Info] Log-{'Rotation' if rotated else 'Truncation'} erkannt – öffne neu.")
-                        f, st_prev = open_follow(log_path)
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+                        print(ts(), t("tail.rotation" if rotated else "tail.truncation"))
+                        f, st_prev = open_follow(log_path, t)
                         last_inode = getattr(st_prev, "st_ino", None)
                         buffer = ""
                     else:
                         time.sleep(poll_ms / 1000)
 
             except KeyboardInterrupt:
-                print("\n", ts(), "Beendet durch Benutzer (Strg+C).")
-                try: f.close()
-                except Exception: pass
+                print("\n", ts(), t("tail.terminated"))
+                try:
+                    f.close()
+                except Exception:
+                    pass
                 break
             except Exception as e:
-                print(ts(), f"[Fehler] {e!r}")
+                print(ts(), t("tail.error", err=e))
                 time.sleep(poll_ms / 1000)
 
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
-    return t
+    t_thread = threading.Thread(target=_worker, daemon=True)
+    t_thread.start()
+    return t_thread
