@@ -1,5 +1,4 @@
 import os, sys
-import updater
 from pathlib import Path
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
@@ -9,6 +8,7 @@ from app.hud import TkHud
 from app.tailer import start_tail_thread
 from app.util import ts
 from app.i18n import load_i18n
+from app.updater import maybe_update
 
 # --- Laufzeitpfade: EXE vs. Script ---
 if getattr(sys, 'frozen', False):  # PyInstaller-EXE
@@ -168,7 +168,7 @@ def main():
 if __name__ == "__main__":
     # Only run the self-updater if this is a frozen/packaged build
     if getattr(sys, "frozen", False):
-        updater.maybe_update(prereleases=False)
+        maybe_update(prereleases=False)
 
     # then start your actual app
     main()
