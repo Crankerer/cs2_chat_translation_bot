@@ -11,6 +11,10 @@ set LANG_SRC_DIR=app\lang
 set DIST_DIR=dist\%APP_NAME%
 set UPDATER_FILE=app\updater.py
 
+:: Neuer Helper (Pfad ggf. anpassen, falls update_helper.py woanders liegt)
+set UPDATE_HELPER_SCRIPT=update_helper.py
+set UPDATE_HELPER_NAME=update_helper
+
 echo.
 echo 🏗️  Building %APP_NAME% with PyInstaller...
 echo.
@@ -19,7 +23,7 @@ echo.
 :: Create build number from current date/time: ddMMHHmm  (day, month, hour, minute)
 :: Using PowerShell for locale-independent formatting
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format \"ddMMHHmm\""') do set BUILDNUMBER=%%A
-set CURRENT_VERSION=0.1.%BUILDNUMBER%
+set CURRENT_VERSION=0.0.%BUILDNUMBER%
 
 echo 📌 CURRENT_VERSION = %CURRENT_VERSION%
 :: --------------------------------------------------------------------------------
@@ -35,11 +39,10 @@ del "%APP_NAME%.spec" 2>nul
 echo CURRENT_VERSION = "%CURRENT_VERSION%" > app\_build_version.py
 
 :: --------------------------------------------------------------------------------
-:: PyInstaller command
+:: PyInstaller command (Hauptprogramm)
 pyinstaller %ENTRY_POINT% ^
  --name %APP_NAME% ^
  --onedir ^
- --windowed ^
  --paths %EXTRA_PATH% ^
  --add-data "%CONFIG_FILE%;." ^
  --add-data "app\_build_version.py;."
@@ -56,6 +59,27 @@ if %errorlevel% neq 0 (
 if exist "%UPDATER_FILE%.bak" (
     move /y "%UPDATER_FILE%.bak" "%UPDATER_FILE%" >nul
 )
+
+:: --------------------------------------------------------------------------------
+:: Build update_helper als Onefile-EXE
+echo.
+echo 🏗️  Building %UPDATE_HELPER_NAME% (update_helper.py) as onefile...
+pyinstaller "%UPDATE_HELPER_SCRIPT%" ^
+ --name "%UPDATE_HELPER_NAME%" ^
+ --onefile ^
+ --paths %EXTRA_PATH%
+
+if %errorlevel% neq 0 (
+    echo ❌ Build of %UPDATE_HELPER_NAME% failed!
+    pause
+    exit /b %errorlevel%
+)
+
+:: Kopiere update_helper.exe in den gleichen Ordner wie die Haupt-EXE
+echo.
+echo 📦 Copying %UPDATE_HELPER_NAME%.exe to %DIST_DIR% ...
+if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
+copy /Y "dist\%UPDATE_HELPER_NAME%.exe" "%DIST_DIR%\%UPDATE_HELPER_NAME%.exe" >nul
 
 :: --------------------------------------------------------------------------------
 :: Copy language files

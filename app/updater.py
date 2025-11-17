@@ -1,5 +1,3 @@
-# updater.py
-# Simple self-updater for Windows, using GitHub Releases only (no hash/signature).
 import json, os, re, sys, tempfile, subprocess, time, zipfile
 from urllib.request import Request, urlopen
 
@@ -41,11 +39,9 @@ def _parse_version(s):
     return tuple(map(int, m.groups())) if m else (0, 0, 0)
 
 def _app_path():
-    # For PyInstaller, sys.executable is the .exe file
     return sys.executable if getattr(sys, "frozen", False) else os.path.abspath(sys.argv[0])
 
 def _pick_asset(release):
-    """Pick the best Windows asset (.exe preferred, .zip fallback)."""
     assets = release.get("assets", [])
     exe_pref = [a for a in assets
                 if a["name"].lower().endswith(".exe")
@@ -66,135 +62,129 @@ def _pick_asset(release):
     return None, None
 
 def _extract_update_from_zip(zip_path):
-    """Extract the correct .exe from a ZIP file."""
     with zipfile.ZipFile(zip_path) as z:
         members = z.namelist()
-
         exes = [m for m in members if m.lower().endswith(".exe")]
         if not exes:
-            print("no exes in zip")
             return None, None
 
-        if APP_EXE_NAME:
-            match = [m for m in exes if os.path.basename(m).lower() == APP_EXE_NAME.lower()]
-            if match:
-                pick = match[0]
-            else:
-                print(f"no exes with name: {APP_EXE_NAME}, taking largest exe instead")
-                exes.sort(key=lambda m: z.getinfo(m).file_size, reverse=True)
-                pick = exes[0]
-        else:
-            exes.sort(key=lambda m: z.getinfo(m).file_size, reverse=True)
-            pick = exes[0]
+        exes.sort(key=lambda m: z.getinfo(m).file_size, reverse=True)
+        pick = exes[0]
 
         out_dir = tempfile.mkdtemp()
         z.extractall(out_dir)
 
-        exe_path = os.path.normpath(os.path.join(out_dir, pick))
-        root_dir = os.path.dirname(exe_path)
-
-        print("update root:", root_dir)
-        print("update exe: ", exe_path)
-        return root_dir, exe_path
-
-def _replace_self_windows(new_exe, update_root=None):
-    """Spawn a helper to ersetzen EXE + lang + _internal + VERSION.txt und neu starten."""
-    target = _app_path()          # aktuelle laufende EXE
-    args = sys.argv[1:]
-    install_dir = os.path.dirname(target)
-    exe_name = os.path.basename(target)
-
-    # update_root: Ordner, in dem die neue EXE + lang + _internal + VERSION.txt liegen
-    if update_root is None:
+        new_exe = os.path.normpath(os.path.join(out_dir, pick))
         update_root = os.path.dirname(new_exe)
+        return update_root, new_exe
 
-    helper_code = f"""import os, shutil, sys, time
+def _replace_self_windows(new_exe, update_root):
+    target = _app_path()
+    install_dir = os.path.dirname(target)
+    args = sys.argv[1:]
 
-src_exe = r'''{os.path.normpath(new_exe)}'''
-src_root = r'''{os.path.normpath(update_root)}'''
-dst_exe = r'''{os.path.normpath(target)}'''
-dst_root = r'''{os.path.normpath(install_dir)}'''
-args = {args!r}
+    helper_exe = os.path.join(install_dir, "update_helper.exe")
+    if not os.path.isfile(helper_exe):
+        print(f"[Updater] update_helper.exe not found: {helper_exe}")
+        return False
 
-def copytree(src, dst):
-    if not os.path.exists(src):
-        return
-    if not os.path.exists(dst):
-        os.makedirs(dst, exist_ok=True)
-    for name in os.listdir(src):
-        s = os.path.join(src, name)
-        d = os.path.join(dst, name)
-        if os.path.isdir(s):
-            copytree(s, d)
-        else:
-            shutil.copy2(s, d)
+    args_json = json.dumps(args, ensure_ascii=False)
 
-time.sleep(0.5)
-for _ in range(160):
-    try:
-        print("Helper: copy exe", src_exe, "->", dst_exe)
-        shutil.copy2(src_exe, dst_exe)
+    cmd = [
+        helper_exe,
+        "--src-root", update_root,
+        "--dst-root", install_dir,
+        "--src-exe", os.path.abspath(new_exe),
+        "--dst-exe", os.path.abspath(target),
+        "--args-json", args_json,
+    ]
 
-        # lang-Ordner ersetzen/überschreiben
-        copytree(os.path.join(src_root, "lang"), os.path.join(dst_root, "lang"))
-
-        # _internal-Ordner ersetzen/überschreiben
-        copytree(os.path.join(src_root, "_internal"), os.path.join(dst_root, "_internal"))
-
-        # VERSION.txt
-        src_ver = os.path.join(src_root, "VERSION.txt")
-        if os.path.isfile(src_ver):
-            shutil.copy2(src_ver, os.path.join(dst_root, "VERSION.txt"))
-
-        break
-    except PermissionError:
-        time.sleep(0.25)
-
-os.execv(dst_exe, [dst_exe] + args)
-"""
-
-    tmp_py = os.path.join(tempfile.gettempdir(), f"{REPO}_upd_helper.py")
-    with open(tmp_py, "w", encoding="utf-8") as f:
-        f.write(helper_code)
-
-    subprocess.Popen([sys.executable, tmp_py], close_fds=True)
+    print("[Updater] Starting update_helper:", cmd)
+    subprocess.Popen(cmd, close_fds=True)
     sys.exit(0)
 
 def maybe_update(prereleases=False):
-    """Check GitHub for a new version, and self-update if found."""
     try:
-        rel = _http_json(f"https://api.github.com/repos/{OWNER}/{REPO}/releases")[0]
+        url = f"https://api.github.com/repos/{OWNER}/{REPO}/releases"
+        rel_data = _http_json(url)
+
+        if isinstance(rel_data, list):
+            if not rel_data:
+                print("[Updater] No releases found.")
+                return False
+            if prereleases:
+                rel = rel_data[0]
+            else:
+                rel = next(
+                    (r for r in rel_data
+                     if not r.get("draft") and not r.get("prerelease")),
+                    rel_data[0]
+                )
+        elif isinstance(rel_data, dict):
+            rel = rel_data
+        else:
+            print(f"[Updater] Unexpected release type: {type(rel_data)}")
+            return False
+        
         if not rel or rel.get("draft"):
+            print("[Updater] No valid release found.")
             return False
 
-        latest_v = _parse_version(rel.get("tag_name") or rel.get("name"))
+        latest_version_str = rel.get("tag_name") or rel.get("name")
+        latest_v = _parse_version(latest_version_str)
+
         current_v = _parse_version(CURRENT_VERSION)
+
+        print(f"[Updater] Local: {CURRENT_VERSION} | Remote: {latest_version_str}")
+
         if latest_v <= current_v:
-            print(f"[Updater] Bereits neueste Version installiert: {current_v}")
+            print("[Updater] Already up to date.")
             return False
+
+        print("[Updater] New version available, downloading...")
 
         asset, kind = _pick_asset(rel)
         if not asset:
             print("[Updater] No suitable Windows asset found.")
             return False
 
-        fd, tmp = tempfile.mkstemp()
+        fd, tmp_file = tempfile.mkstemp()
         os.close(fd)
-        _download(asset["browser_download_url"], tmp)
+        _download(asset["browser_download_url"], tmp_file)
 
-        update_root = None
         if kind == "zip":
-            update_root, new_exe = _extract_update_from_zip(tmp)
+            update_root, new_exe = _extract_update_from_zip(tmp_file)
             if not new_exe:
-                print("[Updater] No .exe found in ZIP.")
+                print("[Updater] ZIP contains no executable.")
                 return False
         else:
-            new_exe = tmp
+            new_exe = tmp_file
             update_root = os.path.dirname(new_exe)
 
-        # Jetzt wirklich austauschen + relaunch
-        _replace_self_windows(new_exe, update_root)
-        return True
+        target = _app_path()
+        install_dir = os.path.dirname(target)
+        helper_exe = os.path.join(install_dir, "update_helper.exe")
+
+        if not os.path.isfile(helper_exe):
+            print(f"[Updater] update_helper.exe not found in installation folder: {helper_exe}")
+            return False
+
+        args_json = json.dumps(sys.argv[1:], ensure_ascii=False)
+
+        cmd = [
+            helper_exe,
+            "--src-root", update_root,
+            "--dst-root", install_dir,
+            "--src-exe", os.path.abspath(new_exe),
+            "--dst-exe", os.path.abspath(target),
+            "--args-json", args_json
+        ]
+
+        print("[Updater] Starting update_helper.exe:", cmd)
+
+        subprocess.Popen(cmd, close_fds=True)
+        sys.exit(0)
+
     except Exception as e:
-        print(f"[Updater] Update check failed: {e}")
+        print(f"[Updater] Update failed: {e}")
         return False

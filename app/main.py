@@ -167,8 +167,8 @@ def main():
 
 if __name__ == "__main__":
     # Only run the self-updater if this is a frozen/packaged build
-    if getattr(sys, "frozen", False):
+    #if getattr(sys, "frozen", False):
         maybe_update(prereleases=False)
 
     # then start your actual app
-    main()
+    #main()
