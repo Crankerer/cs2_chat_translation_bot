@@ -156,7 +156,7 @@ def main():
         q.put(("structured", {"dt": dt, "scope": scope, "name": name, "msg": msg}))
 
     pool = ThreadPoolExecutor(max_workers=3)
-    t = start_tail_thread(log_path, ignore_names, poll_ms, cfg, emit_structured, pool)
+    t = start_tail_thread(log_path, ignore_names, poll_ms, cfg, emit_structured, pool, t)
 
     try:
         hud.run()
@@ -167,8 +167,8 @@ def main():
 
 if __name__ == "__main__":
     # Only run the self-updater if this is a frozen/packaged build
-    #if getattr(sys, "frozen", False):
+    if getattr(sys, "frozen", False):
         maybe_update(prereleases=False)
 
     # then start your actual app
-    #main()
+    main()
