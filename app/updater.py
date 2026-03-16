@@ -19,8 +19,7 @@ def _gh_headers(accept_json=False):
     return hdr
 
 def _http_json(url):
-    headers=_gh_headers(accept_json=True)
-    print(headers)
+    headers = _gh_headers(accept_json=True)
     req = Request(url, headers=headers)
     with urlopen(req, timeout=15) as r:
         return json.load(r)
@@ -68,8 +67,10 @@ def _extract_update_from_zip(zip_path):
         if not exes:
             return None, None
 
-        exes.sort(key=lambda m: z.getinfo(m).file_size, reverse=True)
-        pick = exes[0]
+        # Prefer the exact app EXE by name, fall back to largest
+        app_name_lower = APP_EXE_NAME.lower()
+        named = [m for m in exes if os.path.basename(m).lower() == app_name_lower]
+        pick = named[0] if named else sorted(exes, key=lambda m: z.getinfo(m).file_size, reverse=True)[0]
 
         out_dir = tempfile.mkdtemp()
         z.extractall(out_dir)
