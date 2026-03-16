@@ -164,14 +164,18 @@ def main():
     )
 
     class _HudStream:
-        """Tee: writes to original stdout and feeds translated lines to the HUD queue."""
+        """Tee: writes to original stdout (if available) and feeds lines to the HUD queue."""
         def __init__(self, original, queue):
-            self._orig = original
+            self._orig = original  # None in --noconsole builds
             self._q = queue
             self._buf = ""
 
         def write(self, text):
-            self._orig.write(text)
+            if self._orig is not None:
+                try:
+                    self._orig.write(text)
+                except Exception:
+                    pass
             self._buf += text
             while "\n" in self._buf:
                 line, self._buf = self._buf.split("\n", 1)
@@ -182,10 +186,19 @@ def main():
                         pass
 
         def flush(self):
-            self._orig.flush()
+            if self._orig is not None:
+                try:
+                    self._orig.flush()
+                except Exception:
+                    pass
 
         def fileno(self):
-            return self._orig.fileno()
+            if self._orig is not None:
+                try:
+                    return self._orig.fileno()
+                except Exception:
+                    pass
+            return -1
 
     original_stdout = sys.stdout
     sys.stdout = _HudStream(original_stdout, q)

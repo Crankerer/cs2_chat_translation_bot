@@ -23,7 +23,7 @@ echo.
 :: Create build number from current date/time: ddMMHHmm  (day, month, hour, minute)
 :: Using PowerShell for locale-independent formatting
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format \"yyddMMHHmm\""') do set BUILDNUMBER=%%A
-set CURRENT_VERSION=0.1.%BUILDNUMBER%
+set CURRENT_VERSION=0.2.%BUILDNUMBER%
 
 echo 📌 CURRENT_VERSION = %CURRENT_VERSION%
 :: --------------------------------------------------------------------------------
@@ -43,6 +43,7 @@ echo CURRENT_VERSION = "%CURRENT_VERSION%" > app\_build_version.py
 pyinstaller %ENTRY_POINT% ^
  --name %APP_NAME% ^
  --onedir ^
+ --noconsole ^
  --paths %EXTRA_PATH% ^
  --add-data "%CONFIG_FILE%;." ^
  --add-data "app\_build_version.py;."
