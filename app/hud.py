@@ -14,9 +14,10 @@ class TkHud:
     }
 
     def __init__(self, queue, alpha: float = 0.75, font="Consolas 11",
-                 geometry: str = None, on_geometry_change=None):
+                 geometry: str = None, on_geometry_change=None, on_settings=None):
         self.queue = queue
         self.on_geometry_change = on_geometry_change
+        self.on_settings = on_settings
         self._line_count = 0
         self.root = tk.Tk()
         self.root.title("CS2 Chat HUD")
@@ -57,6 +58,13 @@ class TkHud:
         close_btn.bind("<Enter>", lambda e: close_btn.config(fg="#ffaaaa"))
         close_btn.bind("<Leave>", lambda e: close_btn.config(fg="#ff6666"))
         close_btn.bind("<Button-1>", lambda e: self.root.destroy())
+
+        settings_btn = tk.Label(topbar, text="⛭", fg="#7adfff", bg="black",
+                                font=("Consolas", 13, "bold"), cursor="hand2")
+        settings_btn.pack(side="right", padx=2, pady=2)
+        settings_btn.bind("<Enter>", lambda e: settings_btn.config(fg="#ffffff"))
+        settings_btn.bind("<Leave>", lambda e: settings_btn.config(fg="#7adfff"))
+        settings_btn.bind("<Button-1>", lambda e: self.on_settings() if self.on_settings else None)
 
         self.text = tk.Text(
             frame,

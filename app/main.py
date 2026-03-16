@@ -147,6 +147,7 @@ def main():
     # HUD + Tail starten
     from app.hud import TkHud
     from app.tailer import start_tail_thread
+    from app.settings_ui import open_settings
 
     q = Queue()
 
@@ -157,10 +158,23 @@ def main():
         except Exception:
             pass
 
+    def open_settings_dialog():
+        nonlocal cfg
+        def on_save(new_cfg):
+            nonlocal cfg
+            cfg = new_cfg
+            try:
+                save_config(CONFIG_FILENAME, cfg)
+                print(t("cfg.log_saved", path=CONFIG_FILENAME, log=cfg.get("log_path", "")))
+            except Exception as e:
+                print(t("cfg.save_fail", err=e))
+        open_settings(hud.root, cfg, CONFIG_FILENAME, on_save=on_save)
+
     hud = TkHud(
         q, alpha=0.72, font="Consolas 11",
         geometry=cfg.get("hud_geometry"),
         on_geometry_change=save_geometry,
+        on_settings=open_settings_dialog,
     )
 
     class _HudStream:

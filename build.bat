@@ -23,7 +23,7 @@ echo.
 :: Create build number from current date/time: ddMMHHmm  (day, month, hour, minute)
 :: Using PowerShell for locale-independent formatting
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format \"yyddMMHHmm\""') do set BUILDNUMBER=%%A
-set CURRENT_VERSION=0.3.%BUILDNUMBER%
+set CURRENT_VERSION=0.4.%BUILDNUMBER%
 
 echo 📌 CURRENT_VERSION = %CURRENT_VERSION%
 :: --------------------------------------------------------------------------------
