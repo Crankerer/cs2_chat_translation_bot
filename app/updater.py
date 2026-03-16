@@ -8,6 +8,56 @@ REPO = "cs2_chat_translation_bot"
 APP_EXE_NAME = "CS2ChatTranslationBot.exe"
 UA = f"{REPO}-updater/1.0"
 
+
+class _UpdateUI:
+    """Small centered status window shown only when an update is being applied."""
+
+    BG = "#111111"
+
+    def __init__(self, current: str, latest: str):
+        import tkinter as tk
+        self._tk = tk
+        self.root = tk.Tk()
+        self.root.title("CS2ChatTranslationBot – Updater")
+        self.root.overrideredirect(True)
+        self.root.configure(bg=self.BG)
+        self.root.wm_attributes("-alpha", 0.95)
+        self.root.attributes("-topmost", True)
+
+        w, h = 440, 110
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        self.root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+
+        tk.Label(
+            self.root, text="CS2 Chat Translation Bot  –  Update",
+            fg="#7adfff", bg=self.BG, font=("Consolas", 10, "bold"),
+        ).pack(pady=(12, 4))
+
+        tk.Label(
+            self.root, text=f"v{current}  →  {latest}",
+            fg="#a0a0a0", bg=self.BG, font=("Consolas", 9),
+        ).pack()
+
+        self._status_var = tk.StringVar(value="")
+        tk.Label(
+            self.root, textvariable=self._status_var,
+            fg="#ffffff", bg=self.BG, font=("Consolas", 10),
+        ).pack(pady=(6, 0))
+
+        self.root.update()
+
+    def set(self, text: str):
+        self._status_var.set(text)
+        self.root.update()
+
+    def close(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+
 def _gh_headers(accept_json=False):
     hdr = {"User-Agent": UA}
     if accept_json:
@@ -24,14 +74,19 @@ def _http_json(url):
     with urlopen(req, timeout=15) as r:
         return json.load(r)
 
-def _download(url, dest):
+def _download(url, dest, on_progress=None):
     req = Request(url, headers={**_gh_headers(), "Accept": "application/octet-stream"})
     with urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+        total = int(r.headers.get("Content-Length") or 0)
+        received = 0
         while True:
             chunk = r.read(1 << 20)
             if not chunk:
                 break
             f.write(chunk)
+            received += len(chunk)
+            if on_progress:
+                on_progress(received, total)
 
 def _parse_version(s):
     m = re.search(r"(\d+)\.(\d+)\.(\d+)", s or "")
@@ -87,7 +142,9 @@ def _extract_update_from_zip(zip_path):
         return update_root, new_exe
 
 def maybe_update(prereleases=False):
+    ui = None
     try:
+        # --- silent check, no UI yet ---
         url = f"https://api.github.com/repos/{OWNER}/{REPO}/releases"
         rel_data = _http_json(url)
 
@@ -108,14 +165,13 @@ def maybe_update(prereleases=False):
         else:
             print(f"[Updater] Unexpected release type: {type(rel_data)}")
             return False
-        
+
         if not rel or rel.get("draft"):
             print("[Updater] No valid release found.")
             return False
 
         latest_version_str = rel.get("tag_name") or rel.get("name")
         latest_v = _parse_version(latest_version_str)
-
         current_v = _parse_version(CURRENT_VERSION)
 
         print(f"[Updater] Local: {CURRENT_VERSION} | Remote: {latest_version_str}")
@@ -124,21 +180,40 @@ def maybe_update(prereleases=False):
             print("[Updater] Already up to date.")
             return False
 
-        print("[Updater] New version available, downloading...")
+        # --- update found: show UI from here on ---
+        ui = _UpdateUI(CURRENT_VERSION, latest_version_str)
 
         asset, kind = _pick_asset(rel)
         if not asset:
-            print("[Updater] No suitable Windows asset found.")
+            ui.set("No suitable Windows asset found.")
+            time.sleep(2)
+            ui.close()
             return False
+
+        total_bytes = asset.get("size") or 0
+        total_mb = f"{total_bytes / (1 << 20):.1f} MB" if total_bytes else ""
+
+        def on_progress(received, total):
+            if total:
+                pct = int(received / total * 100)
+                ui.set(f"Downloading...  {pct}%  ({received / (1 << 20):.1f} / {total / (1 << 20):.1f} MB)")
+            else:
+                ui.set(f"Downloading...  {received / (1 << 20):.1f} MB")
+
+        ui.set(f"Downloading...  0%  (0.0 / {total_mb})" if total_mb else "Downloading...")
 
         fd, tmp_file = tempfile.mkstemp()
         os.close(fd)
-        _download(asset["browser_download_url"], tmp_file)
+        _download(asset["browser_download_url"], tmp_file, on_progress=on_progress)
+
+        ui.set("Extracting..." if kind == "zip" else "Preparing...")
 
         if kind == "zip":
             update_root, new_exe = _extract_update_from_zip(tmp_file)
             if not new_exe:
-                print("[Updater] ZIP contains no executable.")
+                ui.set("Error: main EXE not found in ZIP.")
+                time.sleep(3)
+                ui.close()
                 return False
         else:
             new_exe = tmp_file
@@ -149,25 +224,33 @@ def maybe_update(prereleases=False):
         helper_exe = os.path.join(install_dir, "update_helper.exe")
 
         if not os.path.isfile(helper_exe):
+            ui.set("Error: update_helper.exe not found.")
+            time.sleep(3)
+            ui.close()
             print(f"[Updater] update_helper.exe not found in installation folder: {helper_exe}")
             return False
 
-        args_json = json.dumps(sys.argv[1:], ensure_ascii=False)
+        ui.set("Installing...  Restarting shortly.")
+        time.sleep(1.5)
+        ui.close()
 
+        args_json = json.dumps(sys.argv[1:], ensure_ascii=False)
         cmd = [
             helper_exe,
             "--src-root", update_root,
             "--dst-root", install_dir,
             "--src-exe", os.path.abspath(new_exe),
             "--dst-exe", os.path.abspath(target),
-            "--args-json", args_json
+            "--args-json", args_json,
         ]
-
         print("[Updater] Starting update_helper.exe:", cmd)
-
         subprocess.Popen(cmd, close_fds=True)
         sys.exit(0)
 
     except Exception as e:
         print(f"[Updater] Update failed: {e}")
+        if ui:
+            ui.set(f"Update failed: {e}")
+            time.sleep(3)
+            ui.close()
         return False
