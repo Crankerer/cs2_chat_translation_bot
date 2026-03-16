@@ -3,18 +3,18 @@ import requests
 from .http_session import SESSION
 from .util import ts
 
-def build_system_prompt(skip_langs: list[str]) -> str:
+def build_system_prompt(skip_langs: list[str], target_lang: str = "German") -> str:
     skip_codes = sorted({(c or "").split('-')[0].strip().lower() for c in skip_langs if c})
     skip_list = ", ".join(skip_codes) if skip_codes else "(empty)"
     return (
         "You are a precise translator bot for CS2 chat.\n"
         "Input is JSON with fields `name` and `message`.\n\n"
-        "GOAL: Reply in English — but ONLY when necessary.\n\n"
+        f"GOAL: Reply in {target_lang} — but ONLY when necessary.\n\n"
         "RULES:\n"
         f"- Detect the language of `message` (ISO 639-1 primary code). SKIP_LANGS = [{skip_list}].\n"
         "- If the language of `message` is in SKIP_LANGS, RETURN AN EMPTY RESPONSE.\n"
         "- If text contains only emotes, punctuation, or whitespace, RETURN EMPTY.\n"
-        "- Otherwise: Translate into English — without prefaces or explanations.\n"
+        f"- Otherwise: Translate into {target_lang} — without prefaces or explanations.\n"
         "- Preserve meaning & tone; neutralize abusive content.\n"
         "- Return only the translated text.\n"
     )

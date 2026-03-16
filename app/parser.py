@@ -4,7 +4,7 @@ import re
 TS_CORE = r'\d{2}/\d{2}\s\d{2}:\d{2}:\d{2}'
 TS = rf'{TS_CORE}\s+'
 CHAT_ENTRY_RE = re.compile(
-    rf'(?P<dt>{TS_CORE})\s+\[(?P<scope>ALLE|T|AT)\]\s+(?P<name>[^:：]+?)\s*[:：]\s*(?P<msg>.*?)(?=(?:{TS})|\Z)',
+    rf'(?P<dt>{TS_CORE})\s+\[(?P<scope>ALLE|ALL|T|AT|CT)\]\s+(?P<name>[^:：]+?)\s*[:：]\s*(?P<msg>.*?)(?=(?:{TS})|\Z)',
     re.DOTALL
 )
 

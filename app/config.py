@@ -10,6 +10,7 @@ DEFAULTS = {
     "gpt_model": "gpt-4o-mini",
     "temperature": 0.2,
     "no_translate_langs": ["de"],
+    "target_lang": "German",
     "open_ai_api_key": os.environ.get("OPENAI_API_KEY", ""),
     "lang": "en"
 }

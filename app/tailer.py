@@ -13,6 +13,7 @@ def should_ignore(name: str, ignore_names: list[str]) -> bool:
 
 def start_tail_thread(
     log_path: str,
+    config_path: str,
     ignore_names: list[str],
     poll_ms: int,
     cfg: dict,
@@ -24,17 +25,41 @@ def start_tail_thread(
     and emits structured translations via `emit_structured`."""
 
     def _worker():
+        nonlocal cfg, ignore_names
         f, st_prev = open_follow(log_path, t)
         last_inode = getattr(st_prev, "st_ino", None)
         buffer = ""
-        system_prompt = build_system_prompt(cfg.get("no_translate_langs", []))
+        system_prompt = build_system_prompt(
+            cfg.get("no_translate_langs", []),
+            cfg.get("target_lang", "German")
+        )
         last_calls = collections.deque(maxlen=10)
+        last_config_check = time.time()
+        CONFIG_CHECK_INTERVAL = 5.0
 
         print(ts(), t("tail.start"))
         print()
 
         while True:
             try:
+                # Reload config if it changed on disk
+                now_check = time.time()
+                if now_check - last_config_check >= CONFIG_CHECK_INTERVAL:
+                    last_config_check = now_check
+                    try:
+                        from .config import load_config
+                        new_cfg = load_config(config_path)
+                        if new_cfg != cfg:
+                            cfg = new_cfg
+                            ignore_names = cfg.get("ignore_names", [])
+                            system_prompt = build_system_prompt(
+                                cfg.get("no_translate_langs", []),
+                                cfg.get("target_lang", "German")
+                            )
+                            print(ts(), t("tail.config_reloaded"))
+                    except Exception:
+                        pass
+
                 chunk = f.read()
                 if chunk:
                     buffer += chunk
@@ -44,10 +69,11 @@ def start_tail_thread(
                             last_end = endpos
                             continue
 
-                        # gentle rate limiting
+                        # Rate limit: max 10 calls per second (sliding window)
                         now = time.time()
-                        if len(last_calls) == last_calls.maxlen and now - last_calls[0] < 1.0:
-                            time.sleep(0.1)
+                        while len(last_calls) >= last_calls.maxlen and now - last_calls[0] < 1.0:
+                            time.sleep(0.05)
+                            now = time.time()
                         last_calls.append(now)
 
                         fut = pool.submit(

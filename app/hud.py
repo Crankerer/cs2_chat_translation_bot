@@ -13,8 +13,11 @@ class TkHud:
         "err": "#ff6b6b",
     }
 
-    def __init__(self, queue, alpha: float = 0.75, font="Consolas 11"):
+    def __init__(self, queue, alpha: float = 0.75, font="Consolas 11",
+                 geometry: str = None, on_geometry_change=None):
         self.queue = queue
+        self.on_geometry_change = on_geometry_change
+        self._line_count = 0
         self.root = tk.Tk()
         self.root.title("CS2 Chat HUD")
         self.root.attributes("-topmost", True)
@@ -31,11 +34,12 @@ class TkHud:
                 pass
 
         w, h = 800, 320
-        self.root.geometry(f"{w}x{h}+40+720")
+        self.root.geometry(geometry if geometry else f"{w}x{h}+40+720")
 
         self._drag = {"x": 0, "y": 0}
         self.root.bind("<Button-1>", self._start_move)
         self.root.bind("<B1-Motion>", self._on_move)
+        self.root.bind("<ButtonRelease-1>", self._on_release)
         self.root.bind("<Escape>", lambda e: self.root.destroy())
         self.root.bind("<F1>", self._toggle_visible)
         self.root.bind("<F2>", lambda e: self._cycle_alpha())
@@ -89,14 +93,18 @@ class TkHud:
         x, y = event.x_root - self._drag["x"], event.y_root - self._drag["y"]
         self.root.geometry(f"+{x}+{y}")
 
+    def _on_release(self, event):
+        if self.on_geometry_change:
+            self.on_geometry_change(self.root.geometry())
+
     def _on_mousewheel(self, event):
         delta = -1 if event.delta > 0 else 1
         self.text.yview_scroll(delta, "units")
 
     def _trim_if_needed(self):
-        lines = int(self.text.index('end-1c').split('.')[0])
-        if lines > 2000:
-            self.text.delete('1.0', '200.0')
+        if self._line_count > 2000:
+            self.text.delete('1.0', '201.0')
+            self._line_count -= 200
 
     def _poll(self):
         try:
@@ -116,6 +124,7 @@ class TkHud:
     def _append_line(self, line: str, tag="meta"):
         self.text.configure(state="normal")
         self.text.insert("end", line.rstrip() + "\n", (tag,))
+        self._line_count += 1
         self._trim_if_needed()
         self.text.see("end")
         self.text.configure(state="disabled")
@@ -126,6 +135,7 @@ class TkHud:
         self.text.insert("end", f"[{scope}] ", ("scope",))
         self.text.insert("end", name + ": ", ("name",))
         self.text.insert("end", msg + "\n", ("msg",))
+        self._line_count += 1
         self._trim_if_needed()
         self.text.see("end")
         self.text.configure(state="disabled")

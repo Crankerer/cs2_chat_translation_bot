@@ -27,6 +27,8 @@
   "hud.temp": "Temperature         : {temp}",
   "hud.no_translate": "no_translate_langs  : {langs}",
   "hud.poll": "Poll-Intervall      : {ms} ms",
+  "hud.target_lang": "Zielsprache         : {lang}",
+  "hud.key_file": "API-Key-Datei       : {path}",
   "llm.error.no_key": "[LLM-Fehler] Kein API-Schlüssel (OPENAI_API_KEY oder config).",
   "llm.error.unauthorized": "[LLM-Fehler] 401 Nicht autorisiert — API-Schlüssel ungültig oder fehlt.",
   "llm.error.rate_limit": "[LLM-Fehler] 429 Ratenlimit — kurze Wartezeit.",
@@ -38,5 +40,6 @@
   "tail.rotation": "[Info] Logrotation erkannt — Datei wird neu geöffnet.",
   "tail.truncation": "[Info] Logkürzung erkannt — Datei wird neu geöffnet.",
   "tail.terminated": "Vom Benutzer beendet (Strg+C).",
-  "tail.error": "[Fehler] {err}"
+  "tail.error": "[Fehler] {err}",
+  "tail.config_reloaded": "[Info] Konfiguration neu geladen."
 }

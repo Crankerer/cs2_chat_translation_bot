@@ -78,31 +78,6 @@ def _extract_update_from_zip(zip_path):
         update_root = os.path.dirname(new_exe)
         return update_root, new_exe
 
-def _replace_self_windows(new_exe, update_root):
-    target = _app_path()
-    install_dir = os.path.dirname(target)
-    args = sys.argv[1:]
-
-    helper_exe = os.path.join(install_dir, "update_helper.exe")
-    if not os.path.isfile(helper_exe):
-        print(f"[Updater] update_helper.exe not found: {helper_exe}")
-        return False
-
-    args_json = json.dumps(args, ensure_ascii=False)
-
-    cmd = [
-        helper_exe,
-        "--src-root", update_root,
-        "--dst-root", install_dir,
-        "--src-exe", os.path.abspath(new_exe),
-        "--dst-exe", os.path.abspath(target),
-        "--args-json", args_json,
-    ]
-
-    print("[Updater] Starting update_helper:", cmd)
-    subprocess.Popen(cmd, close_fds=True)
-    sys.exit(0)
-
 def maybe_update(prereleases=False):
     try:
         url = f"https://api.github.com/repos/{OWNER}/{REPO}/releases"

@@ -76,19 +76,18 @@ def request_api_key(t) -> str:
         root.destroy()
 
 def main():
-    # 1) config.json sicherstellen/erzeugen
-    ensure_config_exists(CONFIG_FILENAME, lambda k, **kw: k)
-
-    # 2) Konfiguration laden (nur EINMAL!)
+    # 1) Konfiguration laden (load_config handles missing file gracefully)
     cfg = load_config(CONFIG_FILENAME)
 
-    # 2b) Sprache laden
+    # 2) Sprache laden
     lang_code = (cfg.get("lang") or "en").strip().lower()
     i18n = load_i18n(BASE_DIR, lang_code)
     t = i18n.t  # Kurzalias
 
-    # 3) API-Key ggf. erfragen & speichern
+    # 3) config.json erstmalig anlegen (jetzt mit echten i18n-Strings)
     ensure_config_exists(CONFIG_FILENAME, t)
+
+    # 4) API-Key ggf. erfragen & speichern
     api_key = (cfg.get("open_ai_api_key") or "").strip()
     if not api_key:
         print(t("api.missing"))
@@ -137,8 +136,12 @@ def main():
     print(t("hud.gpt_model", model=cfg.get("gpt_model")))
     print(t("hud.api_key", state='(gesetzt)' if cfg.get("open_ai_api_key") else '(leer)'))
     print(t("hud.temp", temp=cfg.get("temperature")))
+    print(t("hud.target_lang", lang=cfg.get("target_lang", "German")))
     print(t("hud.no_translate", langs=', '.join(cfg.get('no_translate_langs', [])) or '(leer)'))
     print(t("hud.poll", ms=poll_ms))
+    key_file = (cfg.get("open_ai_api_key_file") or "").strip()
+    if key_file:
+        print(t("hud.key_file", path=key_file))
     print()
 
     # HUD + Tail starten
@@ -146,24 +149,61 @@ def main():
     from app.tailer import start_tail_thread
 
     q = Queue()
-    hud = TkHud(q, alpha=0.72, font="Consolas 11")
 
-    import builtins
-    original_print = builtins.print
-    builtins.print = lambda *a, **kw: (original_print(*a, **kw), q.put(("line", " ".join(map(str, a)))))
+    def save_geometry(geo: str):
+        cfg["hud_geometry"] = geo
+        try:
+            save_config(CONFIG_FILENAME, cfg)
+        except Exception:
+            pass
+
+    hud = TkHud(
+        q, alpha=0.72, font="Consolas 11",
+        geometry=cfg.get("hud_geometry"),
+        on_geometry_change=save_geometry,
+    )
+
+    class _HudStream:
+        """Tee: writes to original stdout and feeds translated lines to the HUD queue."""
+        def __init__(self, original, queue):
+            self._orig = original
+            self._q = queue
+            self._buf = ""
+
+        def write(self, text):
+            self._orig.write(text)
+            self._buf += text
+            while "\n" in self._buf:
+                line, self._buf = self._buf.split("\n", 1)
+                if line:
+                    try:
+                        self._q.put(("line", line))
+                    except Exception:
+                        pass
+
+        def flush(self):
+            self._orig.flush()
+
+        def fileno(self):
+            return self._orig.fileno()
+
+    original_stdout = sys.stdout
+    sys.stdout = _HudStream(original_stdout, q)
 
     def emit_structured(dt, scope, name, msg):
         q.put(("structured", {"dt": dt, "scope": scope, "name": name, "msg": msg}))
 
     pool = ThreadPoolExecutor(max_workers=3)
-    t = start_tail_thread(log_path, ignore_names, poll_ms, cfg, emit_structured, pool, t)
+    tail_thread = start_tail_thread(log_path, CONFIG_FILENAME, ignore_names, poll_ms, cfg, emit_structured, pool, t)
 
     try:
         hud.run()
     finally:
-        builtins.print = original_print
-        try: pool.shutdown(wait=False)
-        except Exception: pass
+        sys.stdout = original_stdout
+        try:
+            pool.shutdown(wait=False)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     # Only run the self-updater if this is a frozen/packaged build
