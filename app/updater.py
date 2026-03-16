@@ -67,15 +67,22 @@ def _extract_update_from_zip(zip_path):
         if not exes:
             return None, None
 
-        # Prefer the exact app EXE by name, fall back to largest
         app_name_lower = APP_EXE_NAME.lower()
         named = [m for m in exes if os.path.basename(m).lower() == app_name_lower]
-        pick = named[0] if named else sorted(exes, key=lambda m: z.getinfo(m).file_size, reverse=True)[0]
+        if not named:
+            print(f"[Updater] {APP_EXE_NAME} not found in ZIP. Found: {[os.path.basename(m) for m in exes]}")
+            return None, None
+        pick = named[0]
 
         out_dir = tempfile.mkdtemp()
         z.extractall(out_dir)
 
+        print(f"[Updater] {pick} found in ZIP")
+
         new_exe = os.path.normpath(os.path.join(out_dir, pick))
+
+        print(f"[Updater] full path {new_exe}")
+
         update_root = os.path.dirname(new_exe)
         return update_root, new_exe
 
