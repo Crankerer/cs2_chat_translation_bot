@@ -205,6 +205,13 @@ def open_settings(parent_root, cfg: dict, config_path: str, on_save=None):
             on_save(new_cfg)
         win.destroy()
 
+    try:
+        from app._build_version import CURRENT_VERSION
+    except ImportError:
+        CURRENT_VERSION = "dev"
+    tk.Label(btn_bar, text=f"v{CURRENT_VERSION}", fg="#444444", bg=BG,
+             font=FONT_SMALL).pack(side="left")
+
     _make_btn(btn_bar, "Cancel", win.destroy).pack(side="right", padx=(6, 0))
     _make_btn(btn_bar, "Save", _save).pack(side="right")
 

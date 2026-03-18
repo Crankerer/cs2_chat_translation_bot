@@ -11,16 +11,19 @@ from app.i18n import load_i18n
 from app.updater import maybe_update
 
 # --- Laufzeitpfade: EXE vs. Script ---
-if getattr(sys, 'frozen', False):  # PyInstaller-EXE
-    BASE_DIR = os.path.dirname(sys.executable)
-else:                               # Script
-    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+# sys.frozen = PyInstaller; __compiled__ = Nuitka
+try:
+    _is_compiled = bool(__compiled__)
+except NameError:
+    _is_compiled = False
 
-# Projekt-Imports (Pfad sicherstellen)
-if getattr(sys, 'frozen', False):
-    sys.path.insert(0, BASE_DIR)
+if getattr(sys, 'frozen', False) or _is_compiled:
+    BASE_DIR = os.path.dirname(sys.executable)
 else:
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if getattr(sys, 'frozen', False) or _is_compiled:
+    sys.path.insert(0, BASE_DIR)
 
 CONFIG_FILENAME = os.path.join(BASE_DIR, "config.json")
 
@@ -234,7 +237,7 @@ def main():
 
 if __name__ == "__main__":
     # Only run the self-updater if this is a frozen/packaged build
-    if getattr(sys, "frozen", False):
+    if getattr(sys, "frozen", False) or _is_compiled:
         maybe_update(prereleases=False)
 
     # then start your actual app

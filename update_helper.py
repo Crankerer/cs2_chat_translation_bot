@@ -85,24 +85,23 @@ def main():
         print(f"[update_helper] Failed to replace EXE: {last_error}")
         sys.exit(1)
 
-    src_lang = os.path.join(src_root, "lang")
-    dst_lang = os.path.join(dst_root, "lang")
-    print(f"[update_helper] Updating lang/: {src_lang} -> {dst_lang}")
-    copytree_merge(src_lang, dst_lang)
-
-    src_internal = os.path.join(src_root, "_internal")
-    dst_internal = os.path.join(dst_root, "_internal")
-    print(f"[update_helper] Updating _internal/: {src_internal} -> {dst_internal}")
-    copytree_merge(src_internal, dst_internal)
-
-    src_ver = os.path.join(src_root, "VERSION.txt")
-    dst_ver = os.path.join(dst_root, "VERSION.txt")
-    if os.path.isfile(src_ver):
-        print(f"[update_helper] Copying VERSION.txt: {src_ver} -> {dst_ver}")
-        try:
-            shutil.copy2(src_ver, dst_ver)
-        except OSError as e:
-            print(f"[update_helper] Failed to copy VERSION.txt: {e}")
+    # Copy all files/folders from src_root to dst_root, except config.json
+    # (user settings must be preserved across updates).
+    # This handles both Nuitka (flat layout) and PyInstaller (_internal/ subfolder).
+    print(f"[update_helper] Updating dist files: {src_root} -> {dst_root}")
+    for item in os.listdir(src_root):
+        if item.lower() == "config.json":
+            print("[update_helper] Skipping config.json (preserving user settings)")
+            continue
+        src_item = os.path.join(src_root, item)
+        dst_item = os.path.join(dst_root, item)
+        if os.path.isdir(src_item):
+            copytree_merge(src_item, dst_item)
+        else:
+            try:
+                shutil.copy2(src_item, dst_item)
+            except OSError as e:
+                print(f"[update_helper] Failed to copy {item}: {e}")
 
     cmd = [dst_exe] + restart_args
     print(f"[update_helper] Restarting application: {cmd}")
