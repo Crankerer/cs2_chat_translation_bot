@@ -5,7 +5,8 @@ from app._build_version import CURRENT_VERSION
 
 OWNER = "Crankerer"
 REPO = "cs2_chat_translation_bot"
-APP_EXE_NAME = "CS2ChatTranslationBot.exe"
+APP_EXE_NAME = "CS2ChatTranslationBot_app.exe"
+LAUNCHER_EXE_NAME = "CS2ChatTranslationBot.exe"
 UA = f"{REPO}-updater/1.0"
 
 
@@ -93,7 +94,13 @@ def _parse_version(s):
     return tuple(map(int, m.groups())) if m else (0, 0, 0)
 
 def _app_path():
-    return sys.executable if getattr(sys, "frozen", False) else os.path.abspath(sys.argv[0])
+    try:
+        _compiled = bool(__compiled__)
+    except NameError:
+        _compiled = False
+    if getattr(sys, "frozen", False) or _compiled:
+        return sys.executable
+    return os.path.abspath(sys.argv[0])
 
 def _pick_asset(release):
     assets = release.get("assets", [])
@@ -220,31 +227,32 @@ def maybe_update(prereleases=False):
             update_root = os.path.dirname(new_exe)
 
         target = _app_path()
+        # current\ subfolder → one level up is the install root
         install_dir = os.path.dirname(target)
-        helper_exe = os.path.join(install_dir, "update_helper.exe")
+        root_dir = os.path.dirname(install_dir)
+        launcher_exe = os.path.join(root_dir, LAUNCHER_EXE_NAME)
+        update_pending = os.path.join(root_dir, "update_pending")
 
-        if not os.path.isfile(helper_exe):
-            ui.set("Error: update_helper.exe not found.")
+        if not os.path.isfile(launcher_exe):
+            ui.set("Error: launcher not found.")
             time.sleep(3)
             ui.close()
-            print(f"[Updater] update_helper.exe not found in installation folder: {helper_exe}")
+            print(f"[Updater] Launcher not found: {launcher_exe}")
             return False
 
         ui.set("Installing...  Restarting shortly.")
         time.sleep(1.5)
         ui.close()
 
-        args_json = json.dumps(sys.argv[1:], ensure_ascii=False)
-        cmd = [
-            helper_exe,
-            "--src-root", update_root,
-            "--dst-root", install_dir,
-            "--src-exe", os.path.abspath(new_exe),
-            "--dst-exe", os.path.abspath(target),
-            "--args-json", args_json,
-        ]
-        print("[Updater] Starting update_helper.exe:", cmd)
-        subprocess.Popen(cmd, close_fds=True)
+        # Move extracted update into update_pending\ — the launcher applies it on next start
+        import shutil as _shutil
+        if os.path.isdir(update_pending):
+            _shutil.rmtree(update_pending)
+        _shutil.move(update_root, update_pending)
+
+        print(f"[Updater] Pending update staged at: {update_pending}")
+        print(f"[Updater] Relaunching via launcher: {launcher_exe}")
+        subprocess.Popen([launcher_exe] + sys.argv[1:], close_fds=True)
         sys.exit(0)
 
     except Exception as e:

@@ -18,14 +18,18 @@ except NameError:
     _is_compiled = False
 
 if getattr(sys, 'frozen', False) or _is_compiled:
+    # BASE_DIR = current\ subfolder (where the app EXE and lang\ live)
     BASE_DIR = os.path.dirname(sys.executable)
+    # config.json lives one level up in the install root (survives updates)
+    CONFIG_DIR = os.path.dirname(BASE_DIR)
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    CONFIG_DIR = BASE_DIR
 
 if getattr(sys, 'frozen', False) or _is_compiled:
     sys.path.insert(0, BASE_DIR)
 
-CONFIG_FILENAME = os.path.join(BASE_DIR, "config.json")
+CONFIG_FILENAME = os.path.join(CONFIG_DIR, "config.json")
 
 def pick_base_folder(t, initial_dir: str | None = None) -> str:
     import tkinter as tk

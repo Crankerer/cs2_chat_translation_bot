@@ -4,25 +4,28 @@ title Build CS2ChatTranslationBot
 
 :: === Settings ===
 set APP_NAME=CS2ChatTranslationBot
+set APP_EXE_NAME=CS2ChatTranslationBot_app
+set LAUNCHER_SCRIPT=launcher.py
 set ENTRY_POINT=app\main.py
-set CONFIG_FILE=config.json
 set LANG_SRC_DIR=app\lang
 set DIST_DIR=dist\%APP_NAME%
+set CURRENT_DIR=%DIST_DIR%\current
 set NUITKA_BUILD_DIR=.nuitka_build
-
-set UPDATE_HELPER_SCRIPT=update_helper.py
-set UPDATE_HELPER_NAME=update_helper
 
 echo.
 echo Building %APP_NAME% with Nuitka...
 echo.
 
 :: --------------------------------------------------------------------------------
-:: Create build number from current date/time: ddMMHHmm
+:: Create build number from current date/time
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format \"yyddMMHHmm\""') do set BUILDNUMBER=%%A
-set CURRENT_VERSION=0.5.%BUILDNUMBER%
+set CURRENT_VERSION=0.6.%BUILDNUMBER%
+
+:: Windows file version must be exactly 4 parts each <= 65535: 0.6.YYMM.DDmm
+for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format \"yyMM.ddmm\""') do set WIN_VERSION=0.6.%%A
 
 echo CURRENT_VERSION = %CURRENT_VERSION%
+echo WIN_VERSION     = %WIN_VERSION%
 :: --------------------------------------------------------------------------------
 
 :: Write version module (imported by app at runtime)
@@ -34,13 +37,19 @@ rmdir /s /q dist 2>nul
 rmdir /s /q %NUITKA_BUILD_DIR% 2>nul
 
 :: --------------------------------------------------------------------------------
-:: Build main app (standalone, no console window)
+:: Build main app as standalone into current\ subfolder
+echo.
+echo Building main app...
 python -m nuitka ^
  --standalone ^
  --windows-console-mode=disable ^
- --output-filename=%APP_NAME%.exe ^
+ --output-filename=%APP_EXE_NAME%.exe ^
  --output-dir=%NUITKA_BUILD_DIR% ^
  --enable-plugin=tk-inter ^
+ --windows-company-name="Crankerer" ^
+ --windows-product-name="CS2 Chat Translation Bot" ^
+ --windows-file-version=%WIN_VERSION% ^
+ --windows-product-version=%WIN_VERSION% ^
  %ENTRY_POINT%
 
 if %errorlevel% neq 0 (
@@ -49,37 +58,42 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-:: Move Nuitka output folder (main.dist) to dist\APP_NAME
-mkdir dist 2>nul
-move "%NUITKA_BUILD_DIR%\main.dist" "%DIST_DIR%"
+:: Move Nuitka output (main.dist) to dist\APP_NAME\current
+mkdir "%DIST_DIR%" 2>nul
+move "%NUITKA_BUILD_DIR%\main.dist" "%CURRENT_DIR%"
 
 :: --------------------------------------------------------------------------------
-:: Build update_helper as single-file EXE
+:: Build launcher as standalone
 echo.
-echo Building %UPDATE_HELPER_NAME% as onefile...
+echo Building launcher...
 python -m nuitka ^
- --onefile ^
- --output-filename=%UPDATE_HELPER_NAME%.exe ^
+ --standalone ^
+ --windows-console-mode=disable ^
+ --output-filename=%APP_NAME%.exe ^
  --output-dir=%NUITKA_BUILD_DIR% ^
- %UPDATE_HELPER_SCRIPT%
+ --windows-company-name="Crankerer" ^
+ --windows-product-name="CS2 Chat Translation Bot" ^
+ --windows-file-version=%WIN_VERSION% ^
+ --windows-product-version=%WIN_VERSION% ^
+ %LAUNCHER_SCRIPT%
 
 if %errorlevel% neq 0 (
-    echo Build of %UPDATE_HELPER_NAME% failed!
+    echo Launcher build failed!
     pause
     exit /b %errorlevel%
 )
 
-:: Copy update_helper.exe into the main dist folder
-copy /Y "%NUITKA_BUILD_DIR%\%UPDATE_HELPER_NAME%.exe" "%DIST_DIR%\%UPDATE_HELPER_NAME%.exe" >nul
+:: Copy launcher standalone contents into root of dist folder
+xcopy /Y /E /I "%NUITKA_BUILD_DIR%\launcher.dist\*" "%DIST_DIR%\" >nul
 
 :: --------------------------------------------------------------------------------
-:: Copy language files
+:: Copy language files into current\lang
 echo.
-echo Copying language files to %DIST_DIR%\lang ...
-if not exist "%DIST_DIR%\lang" mkdir "%DIST_DIR%\lang"
-copy "%LANG_SRC_DIR%\lang_*.json" "%DIST_DIR%\lang" >nul
+echo Copying language files to %CURRENT_DIR%\lang ...
+if not exist "%CURRENT_DIR%\lang" mkdir "%CURRENT_DIR%\lang"
+copy "%LANG_SRC_DIR%\lang_*.json" "%CURRENT_DIR%\lang" >nul
 
-:: Write VERSION.txt
+:: Write VERSION.txt into root of dist folder
 echo %CURRENT_VERSION% > "%DIST_DIR%\VERSION.txt"
 
 :: Cleanup Nuitka temp build folder
@@ -90,7 +104,10 @@ echo Build completed successfully!
 echo Output: %DIST_DIR%
 echo Version: %CURRENT_VERSION%
 echo.
+echo Root:
 dir /b "%DIST_DIR%"
+echo current\:
+dir /b "%CURRENT_DIR%"
 echo.
 
 endlocal
